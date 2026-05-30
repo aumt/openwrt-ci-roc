@@ -6,6 +6,9 @@ on:
   # schedule:
   #   - cron: "0 18 * * *"
 
+permissions:
+  contents: write
+
 env:
   REPO_URL: https://github.com/laipeng668/immortalwrt.git
   REPO_BRANCH: master
