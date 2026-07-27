@@ -235,6 +235,9 @@ jobs:
       actions: read
 
     steps:
+    - name: Generate Release Timestamp(生成发布时间戳)
+      run: echo "RELEASE_DATE=$(date +"%Y-%m-%d-%H%M%S")" >> "$GITHUB_ENV"
+
     - name: Download Packages Artifacts(下载软件包产物)
       uses: actions/download-artifact@v4
       with:
@@ -245,11 +248,11 @@ jobs:
     - name: Upload Packages To Release(发布软件包)
       uses: ncipollo/release-action@v1
       with:
-        name: Packages
+        name: Packages - ${{ env.RELEASE_DATE }}
         allowUpdates: true
         replacesArtifacts: true
         artifactErrorsFailBuild: true
-        tag: Packages
+        tag: Packages-${{ env.RELEASE_DATE }}
         token: ${{ github.token }}
         artifacts: artifacts/release/*
         body: |
