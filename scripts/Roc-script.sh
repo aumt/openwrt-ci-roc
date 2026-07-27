@@ -29,10 +29,10 @@ sed -i "s#_('Firmware Version'), (L\.isObject(boardinfo\.release) ? boardinfo\.r
 # 调节IPQ60XX的1.5GHz频率电压(从0.9375V提高到0.95V，过低可能导致不稳定，过高可能增加功耗和发热，具体数值需要根据实际情况调整)
 # sed -i 's/opp-microvolt = <937500>;/opp-microvolt = <950000>;/' target/linux/qualcommax/patches-6.12/0038-v6.16-arm64-dts-qcom-ipq6018-add-1.5GHz-CPU-Frequency.patch
 
-# 启用 eBPF/XDP 相关内核选项（配合 kmod-xdp-sockets-diag / kmod-sched-bpf / kmod-nft-bridge）
+# 启用 eBPF/XDP 相关内核选项（配合 kmod-xdp-sockets-diag / kmod-sched-bpf / kmod-nft-bridge / dae-daed）
 KERNEL_CFG="target/linux/generic/config-6.12"
 if [ -f "$KERNEL_CFG" ]; then
-  for opt in CONFIG_XDP_SOCKETS_DIAG CONFIG_NET_SCH_BPF CONFIG_NFT_BRIDGE; do
+  for opt in CONFIG_XDP_SOCKETS_DIAG CONFIG_NET_SCH_BPF CONFIG_NFT_BRIDGE CONFIG_DEBUG_INFO_BTF; do
     grep -q "^${opt}=y" "$KERNEL_CFG" || echo "${opt}=y" >> "$KERNEL_CFG"
   done
 fi
@@ -109,6 +109,11 @@ git clone --depth=1 https://github.com/destan19/OpenAppFilter.git package/OpenAp
 git clone --depth=1 https://github.com/laipeng668/luci-app-gecoosac package/luci-app-gecoosac
 git clone --depth=1 https://github.com/NONGFAH/luci-app-athena-led package/luci-app-athena-led
 chmod +x package/luci-app-athena-led/root/etc/init.d/athena_led package/luci-app-athena-led/root/usr/sbin/athena-led
+
+### dae / daed / luci-app-daede — eBPF 透明代理 ###
+
+# 通过稀疏检出从 openwrt-daede 仓库拉取 dae、daed、luci-app-daede 三个包
+git_sparse_clone main https://github.com/kenzok8/openwrt-daede dae daed luci-app-daede
 
 ### PassWall & OpenClash ###
 
