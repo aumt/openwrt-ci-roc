@@ -32,7 +32,7 @@ sed -i "s#_('Firmware Version'), (L\.isObject(boardinfo\.release) ? boardinfo\.r
 # 启用 eBPF/XDP 相关内核选项（配合 kmod-xdp-sockets-diag / kmod-sched-bpf / kmod-nft-bridge / dae-daed）
 KERNEL_CFG="target/linux/generic/config-6.12"
 if [ -f "$KERNEL_CFG" ]; then
-  for opt in CONFIG_XDP_SOCKETS_DIAG CONFIG_NET_SCH_BPF CONFIG_NFT_BRIDGE CONFIG_DEBUG_INFO_BTF; do
+  for opt in CONFIG_XDP_SOCKETS_DIAG CONFIG_NET_SCH_BPF CONFIG_NET_ACT_BPF CONFIG_NFT_BRIDGE; do
     grep -q "^${opt}=y" "$KERNEL_CFG" || echo "${opt}=y" >> "$KERNEL_CFG"
   done
 fi

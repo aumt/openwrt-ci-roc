@@ -7,6 +7,7 @@ GECOOSAC_REPO="${GECOOSAC_REPO:-https://github.com/laipeng668/luci-app-gecoosac}
 AURORA_REPO="${AURORA_REPO:-https://github.com/eamonxg/luci-theme-aurora}"
 AURORA_CONFIG_REPO="${AURORA_CONFIG_REPO:-https://github.com/eamonxg/luci-app-aurora-config}"
 OPENLIST2_REPO="${OPENLIST2_REPO:-https://github.com/laipeng668/luci-app-openlist2}"
+DAEDE_REPO="${DAEDE_REPO:-https://github.com/kenzok8/openwrt-daede}"
 OPENWRT_TARGET="${OPENWRT_TARGET:-x86}"
 OPENWRT_SUBTARGET="${OPENWRT_SUBTARGET:-64}"
 OPENWRT_TARGET_PROFILE="${OPENWRT_TARGET_PROFILE:-}"
@@ -47,7 +48,7 @@ normalize_package_selection() {
     "" | all | "全部")
       printf 'all\n'
       ;;
-    frp | nginx | luci-app-aria2 | luci-app-frpc | luci-app-frps | luci-app-gecoosac | luci-app-openlist2 | luci-theme-aurora)
+    frp | nginx | luci-app-aria2 | luci-app-frpc | luci-app-frps | luci-app-gecoosac | luci-app-openlist2 | luci-app-daede | luci-theme-aurora)
       printf '%s\n' "$selection"
       ;;
     aria2 | ariang)
@@ -74,8 +75,11 @@ normalize_package_selection() {
     luci-app-openlist)
       printf 'luci-app-openlist2\n'
       ;;
+    daede)
+      printf 'luci-app-daede\n'
+      ;;
     *)
-      die "Unsupported PACKAGE_SELECTION: ${1:-} (supported: all, nginx, luci-app-aria2, luci-app-frpc, luci-app-frps, luci-app-gecoosac, luci-app-openlist2, luci-theme-aurora; legacy aliases: aria2, ariang, frp, gecoosac, openlist2)"
+      die "Unsupported PACKAGE_SELECTION: ${1:-} (supported: all, nginx, luci-app-aria2, luci-app-frpc, luci-app-frps, luci-app-gecoosac, luci-app-openlist2, luci-app-daede, luci-theme-aurora; legacy aliases: aria2, ariang, frp, gecoosac, openlist2, daede)"
       ;;
   esac
 }
@@ -338,6 +342,7 @@ load_custom_packages() {
   git_clone_package_repo "$OPENLIST2_REPO" "$SDK_ROOT/package/openlist2" \
     openlist2/Makefile \
     luci-app-openlist2/Makefile
+  git_sparse_clone main "$DAEDE_REPO" package dae daed luci-app-daede
 }
 
 prune_luci_translations() {
@@ -520,6 +525,15 @@ generate_artifact_filters() {
     fi
   fi
 
+  if selection_in luci-app-daede; then
+    config_package_enabled dae && add_artifact_package dae
+    config_package_enabled daed && add_artifact_package daed
+    if config_package_enabled luci-app-daede; then
+      add_artifact_package luci-app-daede
+      add_luci_i18n_packages daede
+    fi
+  fi
+
   [ "${#ARTIFACT_PACKAGE_NAMES[@]}" -gt 0 ] || die "No package artifact filters were generated for PACKAGE_SELECTION=$PACKAGE_SELECTION"
 }
 
@@ -596,6 +610,15 @@ artifact_package_group() {
     package_file_matches_name "$package_file_name" luci-i18n-aurora-config-zh-cn ||
     package_file_matches_name "$package_file_name" luci-i18n-aurora-config-zh-tw; then
     printf 'luci-theme-aurora\n'
+    return 0
+  fi
+
+  if package_file_matches_name "$package_file_name" dae ||
+    package_file_matches_name "$package_file_name" daed ||
+    package_file_matches_name "$package_file_name" luci-app-daede ||
+    package_file_matches_name "$package_file_name" luci-i18n-daede-zh-cn ||
+    package_file_matches_name "$package_file_name" luci-i18n-daede-zh-tw; then
+    printf 'luci-app-daede\n'
     return 0
   fi
 
@@ -766,6 +789,12 @@ generate_compile_targets() {
   if selection_in luci-theme-aurora && ! artifact_group_should_be_skipped luci-theme-aurora; then
     config_package_enabled luci-theme-aurora && add_compile_target package/luci-theme-aurora/compile
     config_package_enabled luci-app-aurora-config && add_compile_target package/luci-app-aurora-config/compile
+  fi
+
+  if selection_in luci-app-daede; then
+    config_package_enabled dae && add_compile_target package/dae/compile
+    config_package_enabled daed && add_compile_target package/daed/compile
+    config_package_enabled luci-app-daede && add_compile_target package/luci-app-daede/compile
   fi
 
   [ "${#COMPILE_TARGETS[@]}" -gt 0 ] || die "No matching package compile targets were enabled by $PACKAGE_CONFIG_FILES for PACKAGE_SELECTION=$PACKAGE_SELECTION"

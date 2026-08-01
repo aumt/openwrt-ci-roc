@@ -12,7 +12,7 @@ on:
         description: 运行 IPQ807X-LibWrt
         required: false
         type: boolean
-        default: true
+        default: false
       jdcloud_immortalwrt:
         description: 运行 JDCloud-ImmortalWrt
         required: false
@@ -27,7 +27,7 @@ on:
         description: 运行 x86-64-ImmortalWrt
         required: false
         type: boolean
-        default: true
+        default: false
       build_packages:
         description: 运行 Build-Packages
         required: false
@@ -50,7 +50,7 @@ jobs:
         actions: write
 
     IPQ807X-LibWrt:
-      if: ${{ github.event_name == 'schedule' || inputs.ipq807x_libwrt }}
+      if: ${{ inputs.ipq807x_libwrt }}
       uses: ./.github/workflows/IPQ807X-LibWrt.yml
       permissions:
         contents: write
@@ -71,7 +71,7 @@ jobs:
         actions: write
 
     x86-64-ImmortalWrt:
-      if: ${{ github.event_name == 'schedule' || inputs.x86_64_immortalwrt }}
+      if: ${{ inputs.x86_64_immortalwrt }}
       uses: ./.github/workflows/x86-64-ImmortalWrt.yml
       permissions:
         contents: write
