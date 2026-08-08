@@ -33,8 +33,9 @@ on:
         required: false
         type: boolean
         default: true
-  schedule:
-    - cron: "0 18 * * 5"
+  # 自动编译已临时关闭（每周五 18:00 UTC+8 定时批量编译）。需要恢复时取消下面两行注释。
+  # schedule:
+  #   - cron: "0 18 * * 5"
 
 permissions:
   contents: read

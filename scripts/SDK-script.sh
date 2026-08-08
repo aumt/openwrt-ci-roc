@@ -323,6 +323,41 @@ remove_builtin_packages() {
     "$SDK_ROOT/feeds/luci/applications/luci-app-frps"
 }
 
+sync_base_feed_kernel_patches() {
+  local src_root
+  local src_dir
+  local dst_dir
+  local patch_file
+  local dst_file
+  local synced=0
+
+  # feeds.conf.default 把 base feed 指向 openwrt-23.05 分支 HEAD，
+  # feeds update 会拉到比 SDK 内置内核更新的补丁（例如 601-page_pool 系列），
+  # 与 SDK 固定的内核版本不匹配，导致 bpf-headers 应用补丁失败。
+  # 用 SDK 自带 target/linux 的补丁覆盖，保证补丁与 SDK 内核版本一致。
+  # 遍历 generic 与各平台目录下的 backport-*/pending-*/hack-*/patches-* 补丁目录。
+  for src_root in "$SDK_ROOT"/target/linux/*/; do
+    [ -d "$src_root" ] || continue
+
+    for src_dir in "$src_root"backport-* "$src_root"pending-* "$src_root"hack-* "$src_root"patches-*; do
+      [ -d "$src_dir" ] || continue
+      dst_dir="$SDK_ROOT/feeds/base/target/linux/$(basename "$src_root")/$(basename "$src_dir")"
+      [ -d "$dst_dir" ] || continue
+
+      for patch_file in "$src_dir/"*.patch; do
+        [ -f "$patch_file" ] || continue
+        dst_file="$dst_dir/$(basename "$patch_file")"
+        if [ ! -f "$dst_file" ] || ! cmp -s "$patch_file" "$dst_file"; then
+          cp -a "$patch_file" "$dst_dir/"
+          synced=$((synced + 1))
+        fi
+      done
+    done
+  done
+
+  log "Synced $synced kernel patches from SDK target/linux to feeds/base (aligned with SDK kernel version)"
+}
+
 load_custom_packages() {
   mkdir -p "$SPARSE_ROOT"
 
@@ -914,6 +949,7 @@ log "Refresh SDK feed indexes"
 log "Install SDK feeds"
 ./scripts/feeds install -a
 prune_luci_translations
+sync_base_feed_kernel_patches
 
 log "Load package config"
 load_config_files
