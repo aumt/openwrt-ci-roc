@@ -318,6 +318,11 @@ if package_enabled luci-app-athena-led luci-i18n-athena-led-zh-cn; then
   chmod +x package/luci-app-athena-led/root/etc/init.d/athena_led package/luci-app-athena-led/root/usr/sbin/athena-led
 fi
 
+if package_enabled luci-app-easymesh; then
+  # luci feed 里没有这个包，必须把源码塞进树里，否则 .config 里那行会被 defconfig 丢掉
+  clone_repository https://github.com/aumt/luci-app-easymesh main package/luci-app-easymesh
+fi
+
 ### PassWall & OpenClash ###
 
 if package_enabled luci-app-passwall luci-app-passwall2; then
