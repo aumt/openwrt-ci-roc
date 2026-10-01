@@ -74,6 +74,9 @@ jobs:
       staging_key: ${{ steps.variables.outputs.staging_key }}
       version_info: ${{ steps.source.outputs.version_info }}
       version_kernel: ${{ steps.source.outputs.version_kernel }}
+      # Release 是**另一个 job**，$GITHUB_ENV 传不过去，只能靠 job outputs。
+      # 构建时刻给 Release 拼 tag 用（见 Compile Firmware 步骤里的说明）。
+      date: ${{ steps.compile.outputs.date }}
 
     steps:
     - name: Check Server Performance(检查服务器性能)
@@ -291,12 +294,22 @@ jobs:
         done
 
     - name: Compile Firmware(开始编译固件)
+      # id 是给 job outputs 里的 date 用的
+      id: compile
       run: |
         cd "$OPENWRT_PATH"
         echo -e "$(nproc) thread compile"
         make -j"$(nproc)" || make -j1 || make -j1 V=s
         echo "status=success" >> "$GITHUB_OUTPUT"
-        echo "DATE=$(date +"%Y-%m-%d-%H%M%S")" >> "$GITHUB_ENV"
+        # 构建时刻。**两个地方都要写**：GITHUB_ENV 只在本 job 内可见，
+        # 而 Release 是另一个 job，只能通过 GITHUB_OUTPUT -> job outputs 传过去。
+        # 2026-10-01 的 run 36831101385 就是只写了 GITHUB_ENV，Release job 里
+        # env.DATE 读到空值，tag 退化成 "JDCloud-"，GitHub 回
+        # 422 "tag_name is not a valid tag"，固件编了 2 小时 17 分却没能发布。
+        # 只取一次时间，保证两个变量严格相等。
+        STAMP="$(date +"%Y-%m-%d-%H%M%S")"
+        echo "DATE=$STAMP" >> "$GITHUB_ENV"
+        echo "date=$STAMP" >> "$GITHUB_OUTPUT"
         echo "FILE_DATE=$(date +"%Y.%m.%d")" >> "$GITHUB_ENV"
 
     - name: Check Space Usage(检查空间使用情况)
@@ -368,6 +381,23 @@ jobs:
       cancel-in-progress: false
 
     steps:
+    - name: Check Release Tag(校验 Release tag)
+      # tag 由 Build job 的构建时刻拼成。它一旦为空，tag 就退化成 "JDCloud-"，
+      # 而 GitHub 只回一句含糊的 422 "tag_name is not a valid tag"，
+      # 看不出真正原因（2026-10-01 就是这样白等了一场 2 小时 17 分的编译）。
+      # 在这里先把空值拦住，并把拼出来的 tag 打出来备查。
+      env:
+        DATE: ${{ needs.Build.outputs.date }}
+        FIRMWARE_TAG: ${{ inputs.firmware_tag }}
+      run: |
+        set -euo pipefail
+        echo "构建时刻 = [$DATE]"
+        if [ -z "$DATE" ]; then
+          echo "::error::Build job 的 date 输出为空，tag 会退化成 '${FIRMWARE_TAG}-'"
+          exit 1
+        fi
+        echo "本次 Release tag = ${FIRMWARE_TAG}-${DATE}"
+
     - name: Download Firmware Artifact(下载固件产物)
       uses: actions/download-artifact@v4
       with:
@@ -377,11 +407,11 @@ jobs:
     - name: Upload Firmware To Release(发布固件)
       uses: ncipollo/release-action@v1
       with:
-        name: ${{ inputs.firmware_tag }} - ${{ env.DATE }}
+        name: ${{ inputs.firmware_tag }} - ${{ needs.Build.outputs.date }}
         allowUpdates: true
         replacesArtifacts: true
         artifactErrorsFailBuild: true
-        tag: ${{ inputs.firmware_tag }}-${{ env.DATE }}
+        tag: ${{ inputs.firmware_tag }}-${{ needs.Build.outputs.date }}
         token: ${{ github.token }}
         artifacts: artifacts/firmware/*
         body: |
