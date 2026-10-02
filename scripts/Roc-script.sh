@@ -367,6 +367,9 @@ fi
 # 注意两种错误写法：DEPENDS 里的 @ 是「整包可见性」标记，写成 +kmod-lib-crc32c@LINUX_6_12
 # 会变成畸形包名；@lt6.18/@ge6.18 这类版本过滤在 DEPENDS 里也不生效（只有 FILES/AUTOLOAD/
 # KCONFIG 走 kernel.mk 的 version_filter），写上去会让 make defconfig 直接报错退出。
+#
+# 当前 config 已回退到 6.12（LINUX_6_12=y），本块在此等价于无操作；保留它是为了下次再开
+# CONFIG_TESTING_KERNEL 时包不会再次凭空消失。
 # ---------------------------------------------------------------------------
 BATMAN_ADV_MAKEFILE="feeds/routing/batman-adv/Makefile"
 LIB_MODULES_MAKEFILE="package/kernel/linux/modules/lib.mk"
@@ -389,5 +392,51 @@ if [ -f "$BATMAN_ADV_MAKEFILE" ]; then
     fi
   else
     echo "[batman-adv] $LIB_MODULES_MAKEFILE 里 lib-crc32c 无 @LINUX_6_12 限制，本树不受影响，跳过"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 修 feeds/routing/batman-adv 在 6.15+ 内核上编译失败（kbuild 删掉了 EXTRA_CFLAGS）
+#
+# 内核 6.15 起 kbuild 移除了自 2007 年就废弃的 EXTRA_*FLAGS 兼容层（Masahiro Yamada,
+# "kbuild: remove EXTRA_*FLAGS support"）：scripts/Makefile.lib 里的
+#     ccflags-y += $(EXTRA_CFLAGS)
+# （以及 asflags/cppflags/ldflags 三行）被删。已逐版本核对：6.14 及以前有，6.15 起没有。
+#
+# 而 openwrt/routing 的 batman-adv 仍用
+#     EXTRA_CFLAGS="$(PKG_EXTRA_CFLAGS)"
+# 把 -DCONFIG_BATMAN_ADV_*=1 传给编译器（24.10 与 25.12 两个分支都一样）。6.15+ 上这些宏
+# 被 kbuild 静默丢掉 ⇒ net/batman-adv/bat_v.c 在 CONFIG_BATMAN_ADV_BATMAN_V 未定义的情况下
+# 照样被编（这条通路本身是好的：batman-adv-$(CONFIG_BATMAN_ADV_BATMAN_V) += bat_v.o 走的是
+# make 命令行变量），types.h 里没有 bat_v 成员、bat_v.h 又走 #else 存根 ⇒ 满屏
+#   error: 'struct batadv_hard_iface' has no member named 'bat_v'; did you mean 'bat_iv'?
+#   error: redefinition of 'batadv_v_init'
+# 最后收在 "ERROR: package/feeds/routing/batman-adv failed to build."
+# 注意 NOSTDINC_FLAGS 并没被删，它里面的 -I/-include 仍然生效，所以只有 EXTRA_CFLAGS 要改。
+#
+# 修法：EXTRA_CFLAGS → ccflags-y，即 kbuild 官方给出的废弃对应关系。v6.18 的
+# scripts/Makefile.lib:28 `_c_flags` 里照样用 $(ccflags-y)；scripts/Makefile.build:24 的
+# `ccflags-y :=` 只是清空环境继承，压不过命令行赋值，所以在命令行上仍然生效。
+# ccflags-y 自 2007 年就有，改动对所有内核版本都安全（老内核上行为与原来一致）。
+#
+# 不能改成 KCFLAGS：$(KERNEL_MAKE_FLAGS) 里已经带了 KCFLAGS，命令行上再写一次会互相覆盖，
+# 把 OpenWrt 的 -fmacro-prefix-map / -fno-caller-saves 丢掉。
+#
+# 当前 config 已回退到 6.12（该版本上 EXTRA_CFLAGS 仍有效，ccflags-y 行为完全一致），
+# 保留本块是为了以后重新开 CONFIG_TESTING_KERNEL 时不必再查一遍。
+# ---------------------------------------------------------------------------
+if [ -f "$BATMAN_ADV_MAKEFILE" ]; then
+  if grep -q 'ccflags-y="$(PKG_EXTRA_CFLAGS)"' "$BATMAN_ADV_MAKEFILE"; then
+    echo "[batman-adv] 宏已走 ccflags-y，跳过"
+  elif grep -q 'EXTRA_CFLAGS="$(PKG_EXTRA_CFLAGS)"' "$BATMAN_ADV_MAKEFILE"; then
+    sed -i 's#EXTRA_CFLAGS="$(PKG_EXTRA_CFLAGS)"#ccflags-y="$(PKG_EXTRA_CFLAGS)"#' "$BATMAN_ADV_MAKEFILE"
+    grep -q 'ccflags-y="$(PKG_EXTRA_CFLAGS)"' "$BATMAN_ADV_MAKEFILE" || {
+      echo "Error: batman-adv 的 EXTRA_CFLAGS 改写失败" >&2
+      exit 1
+    }
+    echo "[batman-adv] 已把 EXTRA_CFLAGS 改写为 ccflags-y（内核 ≥6.15 已移除 EXTRA_CFLAGS）"
+  else
+    echo "Error: $BATMAN_ADV_MAKEFILE 里找不到 EXTRA_CFLAGS=\"\$(PKG_EXTRA_CFLAGS)\"，上游结构可能已变，请人工确认" >&2
+    exit 1
   fi
 fi
