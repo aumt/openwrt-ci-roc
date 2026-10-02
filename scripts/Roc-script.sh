@@ -346,3 +346,48 @@ fi
 
 ./scripts/feeds update -i -a
 ./scripts/feeds install -a
+
+# ---------------------------------------------------------------------------
+# 修 feeds/routing/batman-adv 在 6.13+ 内核上被 make defconfig 静默丢弃
+#
+# 上游 package/kernel/linux/modules/lib.mk 的 kmod-lib-crc32c 带 @LINUX_6_12：内核 ≥6.13
+# 删掉了 lib/libcrc32c.ko，crc32c() 改由 lib/crc/crc32.o 提供（CONFIG_CRC32=y，编进内核
+# 本体并 EXPORT_SYMBOL，见 v6.18 lib/crc/crc32-main.c）。但 routing feed 的 batman-adv
+# 仍写死 +kmod-lib-crc32c，于是 6.18 目标上 PACKAGE_kmod-batman-adv 会把 kmod-lib-crc32c
+# 的裸依赖 @LINUX_6_12 提升成自己的 depends on（package-metadata.pl 的 mconf_depends 会
+# 递归提升 + 依赖的 depends），依赖不满足 ⇒ 整个符号不可见 ⇒ CONFIG_PACKAGE_kmod-batman-adv=y
+# 被静默丢掉（连 "# ... is not set" 都不写），batman-adv 的 Config.in（BATMAN_ADV_*）也一起
+# 消失，结果 luci-app-easymesh / luci-proto-batman-adv 装不上（缺 kmod-batman-adv）。
+#
+# 修法：改成带条件的 +LINUX_6_12:kmod-lib-crc32c（与同一行已有的
+# +BATMAN_ADV_BLA:kmod-lib-crc16 同构）。6.12 上 LINUX_6_12=y，生成
+# "select PACKAGE_kmod-lib-crc32c if LINUX_6_12"，与原来完全等价；6.18 上该依赖被丢弃，
+# 而 crc32c() 本来就由内核本体提供，不需要任何模块。
+#
+# 注意两种错误写法：DEPENDS 里的 @ 是「整包可见性」标记，写成 +kmod-lib-crc32c@LINUX_6_12
+# 会变成畸形包名；@lt6.18/@ge6.18 这类版本过滤在 DEPENDS 里也不生效（只有 FILES/AUTOLOAD/
+# KCONFIG 走 kernel.mk 的 version_filter），写上去会让 make defconfig 直接报错退出。
+# ---------------------------------------------------------------------------
+BATMAN_ADV_MAKEFILE="feeds/routing/batman-adv/Makefile"
+LIB_MODULES_MAKEFILE="package/kernel/linux/modules/lib.mk"
+if [ -f "$BATMAN_ADV_MAKEFILE" ]; then
+  # 只在本树的 lib-crc32c 确实受内核版本限制时才改，避免在结构不同的树上做无谓改动
+  if grep -q '@LINUX_6_12' "$LIB_MODULES_MAKEFILE"; then
+    if grep -q '+LINUX_6_12:kmod-lib-crc32c' "$BATMAN_ADV_MAKEFILE"; then
+      echo "[batman-adv] 依赖已是版本条件形式，跳过"
+    else
+      if ! grep -q '[[:space:]]+kmod-lib-crc32c' "$BATMAN_ADV_MAKEFILE"; then
+        echo "Error: $BATMAN_ADV_MAKEFILE 里找不到 +kmod-lib-crc32c，上游结构可能已变，请人工确认" >&2
+        exit 1
+      fi
+      sed -i 's#\([[:space:]]\)+kmod-lib-crc32c#\1+LINUX_6_12:kmod-lib-crc32c#' "$BATMAN_ADV_MAKEFILE"
+      grep -q '+LINUX_6_12:kmod-lib-crc32c' "$BATMAN_ADV_MAKEFILE" || {
+        echo "Error: batman-adv 依赖改写失败" >&2
+        exit 1
+      }
+      echo "[batman-adv] 已把 +kmod-lib-crc32c 改写为 +LINUX_6_12:kmod-lib-crc32c"
+    fi
+  else
+    echo "[batman-adv] $LIB_MODULES_MAKEFILE 里 lib-crc32c 无 @LINUX_6_12 限制，本树不受影响，跳过"
+  fi
+fi
